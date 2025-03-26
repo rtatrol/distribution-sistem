@@ -1,0 +1,17 @@
+services:
+  manager:
+    build: ./Manager
+    ports:
+      - "8080:8080"
+    networks:
+      - crackhash-net
+    depends_on:
+      - worker
+
+  worker:
+    build: ./Worker
+    networks:
+      - crackhash-net
+
+networks:
+  crackhash-net:
