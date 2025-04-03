@@ -31,8 +31,8 @@ public class ManagerController : ControllerBase
         _logger.LogInformation($"Starting crack hash {request.Hash}");
 
         var requestId = Guid.NewGuid().ToString();
-        _requests[requestId] = new StatusResponse { Status = "IN_PROGRESS" };
-        workerAnswers[requestId].ExpectedPartCount = _maxParts;//  через IOptions
+        _requests[requestId] = new StatusResponse { Status = RequestState.IN_PROGRESS.ToString() };
+        workerAnswers.TryAdd(requestId, new WorkerTask { RequestId = requestId, ExpectedPartCount = _maxParts });//  через IOptions
 
         var crackRequest = new ManagerCrackRequest
         {
@@ -45,12 +45,10 @@ public class ManagerController : ControllerBase
         };
 
         var xmlContent = XmlSerializeService.Serialize(crackRequest);
-        var content = new StringContent(xmlContent, Encoding.UTF8, "application/xml");
+        var content = new StringContent(xmlContent, Encoding.Unicode, "application/xml");
 
         var client = _clientFactory.CreateClient();
-        await client.PostAsync("http://worker/internal/api/worker/hash/crack/task", content);
-
-        _logger.LogInformation($"send request {requestId} to workers {crackRequest.PartCount}");
+        await client.PostAsync("http://worker:8080/internal/api/worker/hash/crack/task", content);
 
         return new CrackResponse { RequestId = requestId };
     }
@@ -63,7 +61,7 @@ public class ManagerController : ControllerBase
         if (!_requests.TryGetValue(requestId, out var status))
         {
             _logger.LogError($"not found status at requestId = {requestId}");
-            return new StatusResponse { Status = "ERROR", Data = null };
+            return new StatusResponse { Status = RequestState.ERROR.ToString(), Data = null };
         }
         _logger.LogInformation($"succesfully get status at requestId = {requestId}");
         return new StatusResponse { Status = status.Status, Data = status.Data };
@@ -75,19 +73,23 @@ public class ManagerController : ControllerBase
     public void ReceiveWorkerAnswer([FromBody] WorkerAnswerResponse response)
     {
         _logger.LogInformation($"got answer for requestId = {response.RequestId}, from worker part = {response.PartNumber}");
-        var current = workerAnswers[response.RequestId];
-        current.Responses.Add(response);
-        current.ReceivedPartCount++;
-        if (current.ReceivedPartCount == current.ExpectedPartCount)
+
+        if (workerAnswers.TryGetValue(response.RequestId, out var task))
         {
-            _logger.LogInformation($"try to set ready status for requestId = {response.RequestId}");
-            var result = new List<string>();
-            foreach (var resp in current.Responses)
+            task.Responses.Add(response);
+            task.ReceivedPartCount++;
+            if (task.ReceivedPartCount == task.ExpectedPartCount)
             {
-                result.AddRange(resp.Answers!);
+                _logger.LogInformation($"try to set ready status for requestId = {response.RequestId}");
+
+                var result = new List<string>();
+                foreach (var resp in task.Responses)
+                {
+                    result.AddRange(resp.Answers!);
+                }
+                _requests[response.RequestId].Data = result;
+                _requests[response.RequestId].Status = RequestState.READY.ToString();
             }
-            _requests[response.RequestId].Data = result;
-            _requests[response.RequestId].Status = "READY";
         }
     }
 

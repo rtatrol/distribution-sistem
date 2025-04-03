@@ -17,6 +17,7 @@ public class WorkerController : ControllerBase
     }
 
     [HttpPost]
+    [Consumes("application/xml")]
     [Route("internal/api/worker/hash/crack/task")]
     public async Task<IActionResult> ProcessTask([FromBody] ManagerCrackRequest request)
     {
@@ -41,10 +42,10 @@ public class WorkerController : ControllerBase
         };
 
         var xmlContent = XmlSerializeService.Serialize(response);
-        var content = new StringContent(xmlContent, Encoding.UTF8, "application/xml");
+        var content = new StringContent(xmlContent, Encoding.Unicode, "application/xml");
 
         var client = _clientFactory.CreateClient();
-        await client.PatchAsync("http://manager/internal/api/manager/hash/crack/request", content);
+        await client.PatchAsync("http://manager:8080/internal/api/manager/hash/crack/request", content);
 
         return Ok();
     }

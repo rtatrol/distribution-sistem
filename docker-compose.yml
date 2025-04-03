@@ -1,15 +1,23 @@
 services:
   manager:
-    build: ./Manager
+    container_name: manager
+    build:
+      context: .
+      dockerfile: Manager/Dockerfile
     ports:
       - "8080:8080"
-    networks:
-      - crackhash-net
     depends_on:
       - worker
+    environment:
+      - PartCount=1
+    networks:
+      - crackhash-net
 
   worker:
-    build: ./Worker
+    container_name: worker
+    build:
+      context: .
+      dockerfile: Worker/Dockerfile
     networks:
       - crackhash-net
 

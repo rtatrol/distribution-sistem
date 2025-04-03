@@ -12,5 +12,5 @@ public class WorkerAnswerResponse
 
     [XmlArray("Answers")]
     [XmlArrayItem("words")]
-    public List<string>? Answers { get; set; }
+    public List<string> Answers { get; set; } = new();
 }
