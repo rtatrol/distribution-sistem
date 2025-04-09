@@ -1,0 +1,13 @@
+services:
+
+  manager:
+    build:
+      context: .
+      dockerfile: Manager/Dockerfile
+    image: manager
+
+  worker:
+    build:
+      context: .
+      dockerfile: Worker/Dockerfile
+    image: worker

@@ -1,5 +1,5 @@
 
-
+using Manager.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers()
@@ -10,6 +10,10 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 builder.Services.AddHttpClient();
+
+builder.Services.Configure<WorkerOptions>(builder.Configuration.GetSection("WorkerOptions"));
+builder.Services.AddTransient<ITimeoutService, TimeoutService>();
+builder.Services.AddSingleton<IWorkerTaskService, WorkerTaskService>();
 
 var app = builder.Build();
 

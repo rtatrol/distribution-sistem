@@ -1,25 +1,33 @@
-using System.Collections.Concurrent;
 using Manager.Models;
 using Microsoft.AspNetCore.Mvc;
 using Common;
-using System.Text;
+
+using Microsoft.Extensions.Options;
+using Manager.Services;
 
 namespace Manager.Controllers;
 
 [ApiController]
 public class ManagerController : ControllerBase
 {
-    private static Dictionary<String, StatusResponse> _requests = new();
-    private static ConcurrentDictionary<String, WorkerTask> workerAnswers = new();
-    private readonly IHttpClientFactory _clientFactory;
-    private readonly ILogger<ManagerController> _logger;
+    private ILogger<ManagerController> _logger;
 
-    private readonly int _maxParts = 1;
+    private ITimeoutService _timeoutService;
+    private IWorkerTaskService _workerTaskService;
 
-    public ManagerController(IHttpClientFactory clientFactory, ILogger<ManagerController> logger)
+    private readonly int _timeoutInSeconds;
+
+    public ManagerController(
+        ILogger<ManagerController> logger,
+        ITimeoutService timeoutService,
+        IWorkerTaskService workerTaskService,
+        IOptions<WorkerOptions> options)
     {
-        _clientFactory = clientFactory;
         _logger = logger;
+        _timeoutService = timeoutService;
+        _workerTaskService = workerTaskService;
+
+        _timeoutInSeconds = options.Value.TimeoutInSeconds;
     }
 
     [HttpPost]
@@ -30,25 +38,9 @@ public class ManagerController : ControllerBase
     {
         _logger.LogInformation($"Starting crack hash {request.Hash}");
 
-        var requestId = Guid.NewGuid().ToString();
-        _requests[requestId] = new StatusResponse { Status = RequestState.IN_PROGRESS.ToString() };
-        workerAnswers.TryAdd(requestId, new WorkerTask { RequestId = requestId, ExpectedPartCount = _maxParts });//  через IOptions
+        var requestId = await _workerTaskService.CrackAsync(request);
 
-        var crackRequest = new ManagerCrackRequest
-        {
-            RequestId = requestId,
-            PartNumber = 0,
-            PartCount = _maxParts,//вынести в настройки это число
-            Hash = request.Hash,
-            MaxLength = request.MaxLenght,
-            Alphabet = "abcdefghijklmnopqrstuvwxyz0123456789"
-        };
-
-        var xmlContent = XmlSerializeService.Serialize(crackRequest);
-        var content = new StringContent(xmlContent, Encoding.Unicode, "application/xml");
-
-        var client = _clientFactory.CreateClient();
-        await client.PostAsync("http://worker:8080/internal/api/worker/hash/crack/task", content);
+        Task task = Task.Run(() => _timeoutService.SetTimeoutAsync(requestId, _timeoutInSeconds));
 
         return new CrackResponse { RequestId = requestId };
     }
@@ -58,13 +50,7 @@ public class ManagerController : ControllerBase
     public StatusResponse GetStatus([FromQuery] string requestId)
     {
         _logger.LogInformation($"try get status at requestId = {requestId}");
-        if (!_requests.TryGetValue(requestId, out var status))
-        {
-            _logger.LogError($"not found status at requestId = {requestId}");
-            return new StatusResponse { Status = RequestState.ERROR.ToString(), Data = null };
-        }
-        _logger.LogInformation($"succesfully get status at requestId = {requestId}");
-        return new StatusResponse { Status = status.Status, Data = status.Data };
+        return _workerTaskService.GetTask(requestId);
     }
 
     [HttpPatch]
@@ -73,24 +59,7 @@ public class ManagerController : ControllerBase
     public void ReceiveWorkerAnswer([FromBody] WorkerAnswerResponse response)
     {
         _logger.LogInformation($"got answer for requestId = {response.RequestId}, from worker part = {response.PartNumber}");
-
-        if (workerAnswers.TryGetValue(response.RequestId, out var task))
-        {
-            task.Responses.Add(response);
-            task.ReceivedPartCount++;
-            if (task.ReceivedPartCount == task.ExpectedPartCount)
-            {
-                _logger.LogInformation($"try to set ready status for requestId = {response.RequestId}");
-
-                var result = new List<string>();
-                foreach (var resp in task.Responses)
-                {
-                    result.AddRange(resp.Answers!);
-                }
-                _requests[response.RequestId].Data = result;
-                _requests[response.RequestId].Status = RequestState.READY.ToString();
-            }
-        }
+        _workerTaskService.AddPart(response);
     }
 
 }

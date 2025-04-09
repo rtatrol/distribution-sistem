@@ -20,6 +20,7 @@ public class ManagerCrackRequest
     [XmlElement("MaxLength")]
     public int MaxLength { get; set; }
 
-    [XmlElement("Alphabet")]
-    public string Alphabet { get; set; } = "";
+    [XmlArray("Alphabet")]
+    [XmlArrayItem("symbols")]
+    public List<string> Alphabet { get; set; } = new();
 }

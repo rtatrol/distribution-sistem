@@ -3,6 +3,8 @@
 
 
 
+using Worker.Services;
+
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers()
     .AddXmlSerializerFormatters();
@@ -13,6 +15,8 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 builder.Services.AddHttpClient();
+
+builder.Services.AddTransient<IWorkerService, WorkerService>();
 
 var app = builder.Build();
 
