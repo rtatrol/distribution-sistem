@@ -2,7 +2,7 @@ services:
   manager:
     image: manager
     environment:
-      - WORKER_COUNT=10
+      - WORKER_COUNT=1
     ports:
       - "8080:8080"
     depends_on:
@@ -13,7 +13,7 @@ services:
   worker:
     image: worker
     deploy:
-      replicas: 10
+      replicas: 1
     networks:
       - crackhash-net
 
